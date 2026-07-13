@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tablature Sketch</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <p class="eyebrow">GUITAR CHORD SKETCHER</p>
+        <h1>吉他和弦格</h1>
+        <p class="subtitle">設定和弦名稱，在橫向和弦圖上直接標記你想記下的內容。</p>
+      </header>
+
+      <section class="tuning-card">
+        <div>
+          <h2>調弦</h2>
+          <p>由第 6 弦（低音）到第 1 弦（高音）</p>
+        </div>
+        <div id="tuning-inputs" class="tuning-inputs"></div>
+      </section>
+
+      <section class="controls" aria-label="和弦設定">
+        <label class="chord-field">
+          和弦名稱
+          <input id="chord-name" value="Cmaj9" placeholder="例如：Cmaj9" />
+        </label>
+        <label>
+          起始格
+          <input id="start-fret" type="number" min="0" max="23" value="0" />
+        </label>
+        <label>
+          結束格
+          <input id="end-fret" type="number" min="0" max="24" value="5" />
+        </label>
+        <button id="clear-btn" class="secondary">清除標記</button>
+      </section>
+
+      <section class="diagram-card">
+        <div class="diagram-heading">
+          <div>
+            <p class="eyebrow">CHORD DIAGRAM</p>
+            <h2 id="diagram-title">Cmaj9</h2>
+          </div>
+          <p class="tip">點任一格會標記在弦線上；右鍵點格子可移除</p>
+        </div>
+        <div class="diagram-wrap">
+          <div id="fretboard" class="fretboard" aria-label="吉他指板"></div>
+        </div>
+      </section>
+
+      <section class="legend">
+        <span><i class="dot"></i> 自訂標記</span>
+        <span>例如：3、R、9、或任意文字</span>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
+</html>
