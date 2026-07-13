@@ -1,6 +1,8 @@
 # Tablature Sketch
 
-直接以瀏覽器開啟 `index.html` 即可使用，不需要安裝任何套件。
+直接以瀏覽器開啟 `index.html` 即可使用，不需要安裝任何套件。推送到 GitHub 後，也可由 GitHub Pages 直接使用。
+
+部署完成後網址會是：<https://shengwei0515.github.io/tablature/>
 
 - 輸入和弦名稱。
 - 設定各弦調弦（由第 6 弦到第 1 弦）。
