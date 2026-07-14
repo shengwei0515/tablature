@@ -15,11 +15,46 @@ const savedSection = document.querySelector("#saved-section");
 const savedCards = document.querySelector("#saved-cards");
 const savedCount = document.querySelector("#saved-count");
 const exportPdfBtn = document.querySelector("#export-pdf-btn");
+const relativeModeToggle = document.querySelector("#relative-mode-toggle");
 let marks = new Map();
 let rootPitchClass = null;
 let outlineMarks = new Set();
 let editingKey = null;
 let nameMode = "auto";
+
+const FIXED_DEGREE_LABELS = { 0: "1", 4: "3", 7: "5", 10: "♭7", 11: "7" };
+const AMBIGUOUS_DEGREE_PAIRS = {
+  1: ["♭2", "♭9"],
+  2: ["2", "9"],
+  3: ["♭3", "♯9"],
+  5: ["4", "11"],
+  6: ["♭5", "♯11"],
+  8: ["♯5", "♭13"],
+  9: ["6", "13"],
+};
+
+function degreeLabelFor(semitone) {
+  return FIXED_DEGREE_LABELS[semitone] ?? AMBIGUOUS_DEGREE_PAIRS[semitone]?.[0] ?? String(semitone);
+}
+
+function defaultLabelForKey(tuning, key, rootPitchClass, relativeMode) {
+  const [string, fret] = key.split("-").map(Number);
+  const pitchClass = (tuning[string] + fret) % 12;
+  if (rootPitchClass !== null && pitchClass === rootPitchClass) return "R";
+  if (relativeMode && rootPitchClass !== null) {
+    return degreeLabelFor((pitchClass - rootPitchClass + 12) % 12);
+  }
+  return NOTE_NAMES[pitchClass];
+}
+
+function forceRootLabelForPitch(tuning, pitchClass) {
+  for (const [key, value] of marks) {
+    const [string, fret] = key.split("-").map(Number);
+    if ((tuning[string] + fret) % 12 !== pitchClass) continue;
+    if (typeof value === "string" && !/\d/.test(value)) continue;
+    marks.set(key, null);
+  }
+}
 
 function setNameMode(mode) {
   nameMode = mode;
@@ -135,11 +170,17 @@ function renderBoard() {
     const pitchClass = (tuning[string] + fret) % 12;
     const isRootPitch = rootPitchClass !== null && pitchClass === rootPitchClass;
     const isOutline = outlineMarks.has(key);
+    const interval = rootPitchClass !== null ? (pitchClass - rootPitchClass + 12) % 12 : null;
+    const defaultValue = defaultLabelForKey(tuning, key, rootPitchClass, relativeModeToggle.checked);
+    const displayValue = savedValue || defaultValue;
     if (key === editingKey) {
-      const value = savedValue || NOTE_NAMES[pitchClass];
-      svg += `<foreignObject x="${x - 81}" y="${y - 20}" width="162" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(value)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" /><button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button><button type="button" id="outline-toggle" class="outline-toggle ${isOutline ? "is-active" : ""}" aria-pressed="${isOutline}" aria-label="設為其他可用音" title="設為其他可用音（空心）">○</button></div></foreignObject>`;
+      const degreePair = relativeModeToggle.checked && interval !== null ? AMBIGUOUS_DEGREE_PAIRS[interval] : null;
+      const degreeToggleBtn = degreePair
+        ? `<button type="button" id="degree-toggle" class="degree-toggle" data-options="${degreePair[0]},${degreePair[1]}" aria-label="切換 ${degreePair[0]} / ${degreePair[1]}" title="切換 ${degreePair[0]} / ${degreePair[1]}">⇄</button>`
+        : "";
+      svg += `<foreignObject x="${x - (degreePair ? 97 : 81)}" y="${y - 20}" width="${degreePair ? 194 : 162}" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(displayValue)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" />${degreeToggleBtn}<button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button><button type="button" id="outline-toggle" class="outline-toggle ${isOutline ? "is-active" : ""}" aria-pressed="${isOutline}" aria-label="設為其他可用音" title="設為其他可用音（空心）">○</button></div></foreignObject>`;
     } else {
-      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""} ${isOutline ? "is-outline" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text ${isOutline ? "on-outline" : ""}" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(savedValue)}</text>`;
+      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""} ${isOutline ? "is-outline" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text ${isOutline ? "on-outline" : ""}" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(displayValue)}</text>`;
     }
   }
   svg += `</svg>`;
@@ -157,8 +198,11 @@ function renderBoard() {
     };
   };
   board.addEventListener("click", event => {
-    if (event.target.closest && event.target.closest("#marker-editor, #root-toggle, #outline-toggle")) return;
+    if (event.target.closest && event.target.closest("#marker-editor, #root-toggle, #outline-toggle, #degree-toggle")) return;
     const { string, fret } = getPosition(event), key = `${string}-${fret}`;
+    if (relativeModeToggle.checked && rootPitchClass === null && marks.size === 0 && !marks.has(key)) {
+      rootPitchClass = (tuning[string] + fret) % 12;
+    }
     editingKey = key;
     renderBoard();
   });
@@ -180,8 +224,11 @@ function renderBoard() {
       finished = true;
       const key = editingKey;
       const text = editor.value.trim();
-      if (text) marks.set(key, text);
-      else { marks.delete(key); outlineMarks.delete(key); }
+      if (!text) { marks.delete(key); outlineMarks.delete(key); }
+      else {
+        const defaultValue = defaultLabelForKey(tuning, key, rootPitchClass, relativeModeToggle.checked);
+        marks.set(key, text === defaultValue ? null : text);
+      }
       pruneRootIfUnused();
       editingKey = null;
       renderBoard();
@@ -193,6 +240,17 @@ function renderBoard() {
       if (event.key === "Escape") { finished = true; editingKey = null; renderBoard(); }
     });
     editor.addEventListener("blur", save, { once: true });
+    const degreeToggle = document.querySelector("#degree-toggle");
+    if (degreeToggle) {
+      degreeToggle.addEventListener("mousedown", event => event.preventDefault());
+      degreeToggle.addEventListener("click", event => {
+        event.stopPropagation();
+        const [optionA, optionB] = degreeToggle.dataset.options.split(",");
+        editor.value = editor.value.trim() === optionA ? optionB : optionA;
+        editor.focus();
+        editor.select();
+      });
+    }
     const rootToggle = document.querySelector("#root-toggle");
     rootToggle.addEventListener("mousedown", event => event.preventDefault());
     rootToggle.addEventListener("click", event => {
@@ -200,10 +258,20 @@ function renderBoard() {
       const key = editingKey;
       const [string, fret] = key.split("-").map(Number);
       const pitchClass = (tuning[string] + fret) % 12;
+      const becomingRoot = rootPitchClass !== pitchClass;
       const text = editor.value.trim();
-      if (text) marks.set(key, text);
-      else marks.delete(key);
-      rootPitchClass = rootPitchClass === pitchClass ? null : pitchClass;
+      if (!text) {
+        marks.delete(key);
+      } else if (becomingRoot) {
+        // 設為根音時，只要文字含數字（不論是自動推算還是自己打的）就強制顯示 R；純文字自訂內容不動。
+        marks.set(key, /\d/.test(text) ? null : text);
+      } else {
+        const defaultValue = defaultLabelForKey(tuning, key, rootPitchClass, relativeModeToggle.checked);
+        marks.set(key, text === defaultValue ? null : text);
+      }
+      if (becomingRoot) forceRootLabelForPitch(tuning, pitchClass);
+      rootPitchClass = becomingRoot ? pitchClass : null;
+      editingKey = null;
       renderBoard();
     });
     const outlineToggle = document.querySelector("#outline-toggle");
@@ -212,8 +280,11 @@ function renderBoard() {
       event.stopPropagation();
       const key = editingKey;
       const text = editor.value.trim();
-      if (text) marks.set(key, text);
-      else marks.delete(key);
+      if (!text) marks.delete(key);
+      else {
+        const defaultValue = defaultLabelForKey(tuning, key, rootPitchClass, relativeModeToggle.checked);
+        marks.set(key, text === defaultValue ? null : text);
+      }
       if (outlineMarks.has(key)) outlineMarks.delete(key);
       else outlineMarks.add(key);
       renderBoard();
@@ -372,6 +443,8 @@ exportPdfBtn.addEventListener("click", () => {
 
   window.print();
 });
+
+relativeModeToggle.addEventListener("change", renderBoard);
 
 renderTuning();
 renderBoard();
