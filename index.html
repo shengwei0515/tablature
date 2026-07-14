@@ -52,7 +52,11 @@
             <h2 id="diagram-title">未命名圖表</h2>
             <p id="chord-hint" class="chord-hint" hidden></p>
           </div>
-          <p class="tip">點任一格會標記在弦線上；右鍵點格子可移除；編輯標記時點「●」可將該音設為根音（用於和弦偵測，同一時間僅能有一個音名是根音，但同一音名可出現在多個位置）</p>
+          <ul class="tip">
+            <li>點任一格會標記在弦線上；右鍵點格子可移除</li>
+            <li>編輯時點「●」設為根音（用於和弦偵測；同一時間僅一個音名，可出現在多處）</li>
+            <li>編輯時點「○」設為空心，表示其他可用的音（不列入和弦偵測）</li>
+          </ul>
         </div>
         <div class="diagram-wrap">
           <div id="fretboard" class="fretboard" aria-label="吉他指板"></div>
@@ -63,6 +67,7 @@
         <span><i class="dot"></i> 自訂標記</span>
         <span>例如：3、R、9、或任意文字</span>
         <span><i class="dot root"></i> 根音（同一音名，可多處）</span>
+        <span><i class="dot outline"></i> 其他可用的音</span>
       </section>
 
       <section id="saved-section" class="saved-section" hidden>

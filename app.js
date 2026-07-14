@@ -17,6 +17,7 @@ const savedCount = document.querySelector("#saved-count");
 const exportPdfBtn = document.querySelector("#export-pdf-btn");
 let marks = new Map();
 let rootPitchClass = null;
+let outlineMarks = new Set();
 let editingKey = null;
 let nameMode = "auto";
 
@@ -108,7 +109,7 @@ function renderBoard() {
   const firstGridFret = Math.max(1, startFret);
   const frets = Math.max(1, endFret - firstGridFret + 1);
   const tuning = currentTuning();
-  const detectedChord = detectChordName([...marks.keys()].map(key => {
+  const detectedChord = detectChordName([...marks.keys()].filter(key => !outlineMarks.has(key)).map(key => {
     const [string, fret] = key.split("-").map(Number);
     return (tuning[string] + fret) % 12;
   }), rootPitchClass);
@@ -133,11 +134,12 @@ function renderBoard() {
     const x = fret === 0 ? -42 : (fret - firstGridFret + .5) * stepX, y = (5 - string) * stepY;
     const pitchClass = (tuning[string] + fret) % 12;
     const isRootPitch = rootPitchClass !== null && pitchClass === rootPitchClass;
+    const isOutline = outlineMarks.has(key);
     if (key === editingKey) {
       const value = savedValue || NOTE_NAMES[pitchClass];
-      svg += `<foreignObject x="${x - 65}" y="${y - 20}" width="130" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(value)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" /><button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button></div></foreignObject>`;
+      svg += `<foreignObject x="${x - 81}" y="${y - 20}" width="162" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(value)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" /><button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button><button type="button" id="outline-toggle" class="outline-toggle ${isOutline ? "is-active" : ""}" aria-pressed="${isOutline}" aria-label="設為其他可用音" title="設為其他可用音（空心）">○</button></div></foreignObject>`;
     } else {
-      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(savedValue)}</text>`;
+      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""} ${isOutline ? "is-outline" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text ${isOutline ? "on-outline" : ""}" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(savedValue)}</text>`;
     }
   }
   svg += `</svg>`;
@@ -155,7 +157,7 @@ function renderBoard() {
     };
   };
   board.addEventListener("click", event => {
-    if (event.target.closest && event.target.closest("#marker-editor, #root-toggle")) return;
+    if (event.target.closest && event.target.closest("#marker-editor, #root-toggle, #outline-toggle")) return;
     const { string, fret } = getPosition(event), key = `${string}-${fret}`;
     editingKey = key;
     renderBoard();
@@ -163,7 +165,9 @@ function renderBoard() {
   board.addEventListener("contextmenu", event => {
     event.preventDefault();
     const { string, fret } = getPosition(event);
-    marks.delete(`${string}-${fret}`);
+    const deleteKey = `${string}-${fret}`;
+    marks.delete(deleteKey);
+    outlineMarks.delete(deleteKey);
     pruneRootIfUnused();
     editingKey = null;
     renderBoard();
@@ -177,7 +181,7 @@ function renderBoard() {
       const key = editingKey;
       const text = editor.value.trim();
       if (text) marks.set(key, text);
-      else marks.delete(key);
+      else { marks.delete(key); outlineMarks.delete(key); }
       pruneRootIfUnused();
       editingKey = null;
       renderBoard();
@@ -202,6 +206,18 @@ function renderBoard() {
       rootPitchClass = rootPitchClass === pitchClass ? null : pitchClass;
       renderBoard();
     });
+    const outlineToggle = document.querySelector("#outline-toggle");
+    outlineToggle.addEventListener("mousedown", event => event.preventDefault());
+    outlineToggle.addEventListener("click", event => {
+      event.stopPropagation();
+      const key = editingKey;
+      const text = editor.value.trim();
+      if (text) marks.set(key, text);
+      else marks.delete(key);
+      if (outlineMarks.has(key)) outlineMarks.delete(key);
+      else outlineMarks.add(key);
+      renderBoard();
+    });
   }
 }
 
@@ -218,13 +234,14 @@ function updateFretRange() {
     const fret = Number(key.split("-")[1]);
     return fret >= start && fret <= end;
   }));
+  outlineMarks = new Set([...outlineMarks].filter(key => marks.has(key)));
   pruneRootIfUnused();
   renderBoard();
 }
 
 startFretInput.addEventListener("change", updateFretRange);
 endFretInput.addEventListener("change", updateFretRange);
-document.querySelector("#clear-btn").addEventListener("click", () => { marks.clear(); rootPitchClass = null; editingKey = null; renderBoard(); });
+document.querySelector("#clear-btn").addEventListener("click", () => { marks.clear(); outlineMarks.clear(); rootPitchClass = null; editingKey = null; renderBoard(); });
 
 function updateSavedCount() {
   const total = savedCards.querySelectorAll(".saved-card").length;
