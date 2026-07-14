@@ -153,7 +153,8 @@ function renderBoard() {
   chordHint.hidden = !detectedChord;
   chordHint.textContent = detectedChord ? `偵測到和弦：${detectedChord}` : "";
   const stepX = 118, stepY = 66, width = frets * stepX, height = 5 * stepY;
-  const textSize = frets > 8 ? 13 : 18;
+  const textSize = frets > 8 ? 24 : 30;
+  const markerRadius = 31;
   const escapeHtml = value => value.replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" })[char]);
   let svg = `<svg class="fret-svg" viewBox="-72 -30 ${width + 90} ${height + 90}" role="img" aria-label="${title.textContent} 指板圖">`;
   for (let fret = 0; fret <= frets; fret++) svg += `<line class="fret-line ${fret === 0 ? "nut" : ""}" x1="${fret * stepX}" y1="0" x2="${fret * stepX}" y2="${height}"/>`;
@@ -180,7 +181,7 @@ function renderBoard() {
         : "";
       svg += `<foreignObject x="${x - (degreePair ? 97 : 81)}" y="${y - 20}" width="${degreePair ? 194 : 162}" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(displayValue)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" />${degreeToggleBtn}<button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button><button type="button" id="outline-toggle" class="outline-toggle ${isOutline ? "is-active" : ""}" aria-pressed="${isOutline}" aria-label="設為其他可用音" title="設為其他可用音（空心）">○</button></div></foreignObject>`;
     } else {
-      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""} ${isOutline ? "is-outline" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text ${isOutline ? "on-outline" : ""}" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(displayValue)}</text>`;
+      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""} ${isOutline ? "is-outline" : ""}" cx="${x}" cy="${y}" r="${markerRadius}"/><text class="marker-text ${isOutline ? "on-outline" : ""}" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(displayValue)}</text>`;
     }
   }
   svg += `</svg>`;
