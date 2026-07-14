@@ -8,6 +8,9 @@ const endFretInput = document.querySelector("#end-fret");
 const tuningInputs = document.querySelector("#tuning-inputs");
 const fretboard = document.querySelector("#fretboard");
 const title = document.querySelector("#diagram-title");
+const savedSection = document.querySelector("#saved-section");
+const savedCards = document.querySelector("#saved-cards");
+const savedCount = document.querySelector("#saved-count");
 let marks = new Map();
 let editingKey = null;
 
@@ -123,5 +126,81 @@ function updateFretRange() {
 startFretInput.addEventListener("change", updateFretRange);
 endFretInput.addEventListener("change", updateFretRange);
 document.querySelector("#clear-btn").addEventListener("click", () => { marks.clear(); editingKey = null; renderBoard(); });
+
+function updateSavedCount() {
+  const total = savedCards.querySelectorAll(".saved-card").length;
+  savedCount.textContent = total;
+  savedSection.hidden = total === 0;
+}
+
+function setCardWide(card, wide) {
+  card.classList.toggle("full", wide);
+  card.dataset.wide = wide ? "1" : "0";
+  const handle = card.querySelector(".resize-saved");
+  if (handle) handle.setAttribute("aria-label", wide ? "縮小為一半寬度" : "展開為整行寬度");
+}
+
+savedCards.addEventListener("dragover", event => {
+  const dragging = savedCards.querySelector(".saved-card.is-moving");
+  if (!dragging) return;
+  event.preventDefault();
+  const target = event.target.closest && event.target.closest(".saved-card");
+  if (!target || target === dragging) return;
+  const rect = target.getBoundingClientRect();
+  const before = event.clientY < rect.top + rect.height / 2
+    || (event.clientY < rect.bottom && event.clientX < rect.left + rect.width / 2);
+  savedCards.insertBefore(dragging, before ? target : target.nextSibling);
+});
+
+function attachSavedCardControls(card, handle) {
+  const header = card.querySelector(".saved-card-header");
+  card.draggable = true;
+  card.addEventListener("dragstart", event => {
+    if (event.target.closest("button")) { event.preventDefault(); return; }
+    event.dataTransfer.effectAllowed = "move";
+    card.classList.add("is-moving");
+  });
+  card.addEventListener("dragend", () => card.classList.remove("is-moving"));
+
+  handle.addEventListener("click", event => {
+    event.stopPropagation();
+    setCardWide(card, !card.classList.contains("full"));
+  });
+}
+
+document.querySelector("#save-btn").addEventListener("click", () => {
+  if (editingKey) return;
+  const displayedGrids = Math.max(1, Number(endFretInput.value) - Math.max(1, Number(startFretInput.value)) + 1);
+  const card = document.createElement("article");
+  card.className = "saved-card";
+  const header = document.createElement("div");
+  header.className = "saved-card-header";
+  const details = document.createElement("div");
+  const name = document.createElement("h3");
+  name.textContent = title.textContent;
+  details.append(name);
+  const remove = document.createElement("button");
+  remove.className = "delete-saved";
+  remove.textContent = "刪除";
+  remove.addEventListener("click", () => {
+    card.remove();
+    updateSavedCount();
+  });
+  header.append(details, remove);
+  const snapshot = fretboard.querySelector("svg").cloneNode(true);
+  snapshot.querySelectorAll(".hit-area, foreignObject").forEach(element => element.remove());
+  const diagramWrap = document.createElement("div");
+  diagramWrap.className = "saved-diagram";
+  diagramWrap.append(snapshot);
+  const handle = document.createElement("button");
+  handle.className = "resize-saved";
+  handle.type = "button";
+  handle.setAttribute("aria-label", "調整大小");
+  card.append(header, diagramWrap, handle);
+  savedCards.append(card);
+  setCardWide(card, displayedGrids > 5);
+  attachSavedCardControls(card, handle);
+  updateSavedCount();
+});
 renderTuning();
 renderBoard();

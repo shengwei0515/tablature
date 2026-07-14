@@ -35,6 +35,7 @@
           結束格
           <input id="end-fret" type="number" min="0" max="24" value="5" />
         </label>
+        <button id="save-btn" class="primary">儲存目前和弦</button>
         <button id="clear-btn" class="secondary">清除標記</button>
       </section>
 
@@ -54,6 +55,17 @@
       <section class="legend">
         <span><i class="dot"></i> 自訂標記</span>
         <span>例如：3、R、9、或任意文字</span>
+      </section>
+
+      <section id="saved-section" class="saved-section" hidden>
+        <div class="saved-heading">
+          <div>
+            <p class="eyebrow">SAVED CHORDS</p>
+            <h2>已儲存的和弦</h2>
+          </div>
+          <span id="saved-count" class="saved-count">0</span>
+        </div>
+        <div id="saved-cards" class="saved-cards"></div>
       </section>
     </main>
     <script src="app.js"></script>
