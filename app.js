@@ -328,6 +328,63 @@ function setCardWide(card, wide) {
   if (handle) handle.setAttribute("aria-label", wide ? "縮小為一半寬度" : "展開為整行寬度");
 }
 
+const SAVED_CARDS_STORAGE_KEY = "tablature.savedCards";
+
+function persistSavedCards() {
+  const records = [...savedCards.querySelectorAll(".saved-card")].map(card => ({
+    title: card.querySelector("h3").textContent,
+    wide: card.classList.contains("full"),
+    svg: card.querySelector(".saved-diagram").innerHTML,
+  }));
+  try {
+    localStorage.setItem(SAVED_CARDS_STORAGE_KEY, JSON.stringify(records));
+  } catch (error) {
+    console.error("無法儲存到本機快取", error);
+  }
+}
+
+function buildSavedCard(titleText, svgMarkup, wide) {
+  const card = document.createElement("article");
+  card.className = "saved-card";
+  const header = document.createElement("div");
+  header.className = "saved-card-header";
+  const details = document.createElement("div");
+  const name = document.createElement("h3");
+  name.textContent = titleText;
+  details.append(name);
+  const remove = document.createElement("button");
+  remove.className = "delete-saved";
+  remove.textContent = "刪除";
+  remove.addEventListener("click", () => {
+    card.remove();
+    updateSavedCount();
+    persistSavedCards();
+  });
+  header.append(details, remove);
+  const diagramWrap = document.createElement("div");
+  diagramWrap.className = "saved-diagram";
+  diagramWrap.innerHTML = svgMarkup;
+  const handle = document.createElement("button");
+  handle.className = "resize-saved";
+  handle.type = "button";
+  handle.setAttribute("aria-label", "調整大小");
+  card.append(header, diagramWrap, handle);
+  setCardWide(card, wide);
+  attachSavedCardControls(card, handle);
+  return card;
+}
+
+function restoreSavedCards() {
+  let records;
+  try {
+    records = JSON.parse(localStorage.getItem(SAVED_CARDS_STORAGE_KEY) || "[]");
+  } catch (error) {
+    records = [];
+  }
+  records.forEach(record => savedCards.append(buildSavedCard(record.title, record.svg, record.wide)));
+  updateSavedCount();
+}
+
 savedCards.addEventListener("dragover", event => {
   const dragging = savedCards.querySelector(".saved-card.is-moving");
   if (!dragging) return;
@@ -348,47 +405,27 @@ function attachSavedCardControls(card, handle) {
     event.dataTransfer.effectAllowed = "move";
     card.classList.add("is-moving");
   });
-  card.addEventListener("dragend", () => card.classList.remove("is-moving"));
+  card.addEventListener("dragend", () => {
+    card.classList.remove("is-moving");
+    persistSavedCards();
+  });
 
   handle.addEventListener("click", event => {
     event.stopPropagation();
     setCardWide(card, !card.classList.contains("full"));
+    persistSavedCards();
   });
 }
 
 document.querySelector("#save-btn").addEventListener("click", () => {
   if (editingKey) return;
   const displayedGrids = Math.max(1, Number(endFretInput.value) - Math.max(1, Number(startFretInput.value)) + 1);
-  const card = document.createElement("article");
-  card.className = "saved-card";
-  const header = document.createElement("div");
-  header.className = "saved-card-header";
-  const details = document.createElement("div");
-  const name = document.createElement("h3");
-  name.textContent = title.textContent;
-  details.append(name);
-  const remove = document.createElement("button");
-  remove.className = "delete-saved";
-  remove.textContent = "刪除";
-  remove.addEventListener("click", () => {
-    card.remove();
-    updateSavedCount();
-  });
-  header.append(details, remove);
   const snapshot = fretboard.querySelector("svg").cloneNode(true);
   snapshot.querySelectorAll(".hit-area, foreignObject").forEach(element => element.remove());
-  const diagramWrap = document.createElement("div");
-  diagramWrap.className = "saved-diagram";
-  diagramWrap.append(snapshot);
-  const handle = document.createElement("button");
-  handle.className = "resize-saved";
-  handle.type = "button";
-  handle.setAttribute("aria-label", "調整大小");
-  card.append(header, diagramWrap, handle);
+  const card = buildSavedCard(title.textContent, snapshot.outerHTML, displayedGrids > 5);
   savedCards.append(card);
-  setCardWide(card, displayedGrids > 5);
-  attachSavedCardControls(card, handle);
   updateSavedCount();
+  persistSavedCards();
 });
 
 const PDF_ROWS_PER_PAGE = 4;
@@ -449,3 +486,4 @@ relativeModeToggle.addEventListener("change", renderBoard);
 
 renderTuning();
 renderBoard();
+restoreSavedCards();
