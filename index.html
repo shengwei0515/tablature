@@ -9,9 +9,9 @@
   <body>
     <main class="app-shell">
       <header>
-        <p class="eyebrow">GUITAR CHORD SKETCHER</p>
-        <h1>吉他和弦格</h1>
-        <p class="subtitle">設定和弦名稱，在橫向和弦圖上直接標記你想記下的內容。</p>
+        <p class="eyebrow">FRETBOARD SKETCHER</p>
+        <h1>指板圖工具</h1>
+        <p class="subtitle">設定圖表名稱，在橫向指板圖上直接標記你想記下的內容。</p>
       </header>
 
       <section class="tuning-card">
@@ -22,11 +22,17 @@
         <div id="tuning-inputs" class="tuning-inputs"></div>
       </section>
 
-      <section class="controls" aria-label="和弦設定">
-        <label class="chord-field">
-          和弦名稱
-          <input id="chord-name" value="Cmaj9" placeholder="例如：Cmaj9" />
-        </label>
+      <section class="controls" aria-label="標記設定">
+        <div class="name-field">
+          <div class="name-field-head">
+            <span>圖表名稱</span>
+            <div class="name-mode-toggle" role="group" aria-label="圖表名稱模式">
+              <button id="name-mode-auto" type="button" class="mode-btn is-active">自動偵測</button>
+              <button id="name-mode-custom" type="button" class="mode-btn">自訂名稱</button>
+            </div>
+          </div>
+          <input id="diagram-name" value="" placeholder="例如：Cmaj9 或任意名稱" />
+        </div>
         <label>
           起始格
           <input id="start-fret" type="number" min="0" max="23" value="0" />
@@ -35,17 +41,18 @@
           結束格
           <input id="end-fret" type="number" min="0" max="24" value="5" />
         </label>
-        <button id="save-btn" class="primary">儲存目前和弦</button>
+        <button id="save-btn" class="primary">儲存目前圖表</button>
         <button id="clear-btn" class="secondary">清除標記</button>
       </section>
 
       <section class="diagram-card">
         <div class="diagram-heading">
           <div>
-            <p class="eyebrow">CHORD DIAGRAM</p>
-            <h2 id="diagram-title">Cmaj9</h2>
+            <p class="eyebrow">FRETBOARD DIAGRAM</p>
+            <h2 id="diagram-title">未命名圖表</h2>
+            <p id="chord-hint" class="chord-hint" hidden></p>
           </div>
-          <p class="tip">點任一格會標記在弦線上；右鍵點格子可移除</p>
+          <p class="tip">點任一格會標記在弦線上；右鍵點格子可移除；編輯標記時點「●」可將該音設為根音（用於和弦偵測，同一時間僅能有一個音名是根音，但同一音名可出現在多個位置）</p>
         </div>
         <div class="diagram-wrap">
           <div id="fretboard" class="fretboard" aria-label="吉他指板"></div>
@@ -55,19 +62,24 @@
       <section class="legend">
         <span><i class="dot"></i> 自訂標記</span>
         <span>例如：3、R、9、或任意文字</span>
+        <span><i class="dot root"></i> 根音（同一音名，可多處）</span>
       </section>
 
       <section id="saved-section" class="saved-section" hidden>
         <div class="saved-heading">
           <div>
-            <p class="eyebrow">SAVED CHORDS</p>
-            <h2>已儲存的和弦</h2>
+            <p class="eyebrow">SAVED DIAGRAMS</p>
+            <h2>已儲存的圖表</h2>
           </div>
-          <span id="saved-count" class="saved-count">0</span>
+          <div class="saved-heading-actions">
+            <span id="saved-count" class="saved-count">0</span>
+            <button id="export-pdf-btn" class="secondary" type="button">匯出 PDF</button>
+          </div>
         </div>
         <div id="saved-cards" class="saved-cards"></div>
       </section>
     </main>
+    <div id="print-view" aria-hidden="true"></div>
     <script src="app.js"></script>
   </body>
 </html>

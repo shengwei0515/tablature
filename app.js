@@ -2,17 +2,30 @@ const NOTE_NAMES = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A"
 const DEFAULT_TUNING = ["E", "A", "D", "G", "B", "E"];
 const NATURAL_SEMITONES = { C: 0, D: 2, E: 4, F: 5, G: 7, A: 9, B: 11 };
 
-const chordInput = document.querySelector("#chord-name");
+const nameInput = document.querySelector("#diagram-name");
+const nameModeAutoBtn = document.querySelector("#name-mode-auto");
+const nameModeCustomBtn = document.querySelector("#name-mode-custom");
 const startFretInput = document.querySelector("#start-fret");
 const endFretInput = document.querySelector("#end-fret");
 const tuningInputs = document.querySelector("#tuning-inputs");
 const fretboard = document.querySelector("#fretboard");
 const title = document.querySelector("#diagram-title");
+const chordHint = document.querySelector("#chord-hint");
 const savedSection = document.querySelector("#saved-section");
 const savedCards = document.querySelector("#saved-cards");
 const savedCount = document.querySelector("#saved-count");
+const exportPdfBtn = document.querySelector("#export-pdf-btn");
 let marks = new Map();
+let rootPitchClass = null;
 let editingKey = null;
+let nameMode = "auto";
+
+function setNameMode(mode) {
+  nameMode = mode;
+  nameModeAutoBtn.classList.toggle("is-active", mode === "auto");
+  nameModeCustomBtn.classList.toggle("is-active", mode === "custom");
+  if (mode === "custom") nameInput.focus();
+}
 
 function noteToSemitone(note) {
   const normalized = note.trim().toUpperCase().replace("♯", "#").replace("♭", "B");
@@ -25,6 +38,62 @@ function currentTuning() {
   return [...tuningInputs.querySelectorAll("input")].map((input, i) => noteToSemitone(input.value) ?? noteToSemitone(DEFAULT_TUNING[i]));
 }
 
+const CHORD_FORMULAS = [
+  { suffix: "", intervals: [0, 4, 7] },
+  { suffix: "m", intervals: [0, 3, 7] },
+  { suffix: "dim", intervals: [0, 3, 6] },
+  { suffix: "aug", intervals: [0, 4, 8] },
+  { suffix: "sus2", intervals: [0, 2, 7] },
+  { suffix: "sus4", intervals: [0, 5, 7] },
+  { suffix: "maj7", intervals: [0, 4, 7, 11] },
+  { suffix: "7", intervals: [0, 4, 7, 10] },
+  { suffix: "m7", intervals: [0, 3, 7, 10] },
+  { suffix: "m7♭5", intervals: [0, 3, 6, 10] },
+  { suffix: "dim7", intervals: [0, 3, 6, 9] },
+  { suffix: "mMaj7", intervals: [0, 3, 7, 11] },
+  { suffix: "add9", intervals: [0, 2, 4, 7] },
+  { suffix: "madd9", intervals: [0, 2, 3, 7] },
+  { suffix: "9", intervals: [0, 2, 4, 7, 10] },
+  { suffix: "maj9", intervals: [0, 2, 4, 7, 11] },
+  { suffix: "m9", intervals: [0, 2, 3, 7, 10] },
+];
+
+function detectChordName(pitchClasses, forcedRoot) {
+  const unique = [...new Set(pitchClasses)];
+  if (unique.length < 3) return null;
+  const rootCandidates = forcedRoot !== null && unique.includes(forcedRoot) ? [forcedRoot] : unique;
+
+  for (const root of rootCandidates) {
+    const relative = unique.map(pitch => (pitch - root + 12) % 12).sort((a, b) => a - b);
+    for (const formula of CHORD_FORMULAS) {
+      const target = [...formula.intervals].sort((a, b) => a - b);
+      if (relative.length === target.length && relative.every((value, index) => value === target[index])) {
+        return NOTE_NAMES[root] + formula.suffix;
+      }
+    }
+  }
+
+  let best = null;
+  for (const root of rootCandidates) {
+    const relative = unique.map(pitch => (pitch - root + 12) % 12);
+    for (const formula of CHORD_FORMULAS) {
+      if (!relative.every(value => formula.intervals.includes(value))) continue;
+      if (!best || formula.intervals.length < best.formula.intervals.length) best = { root, formula };
+    }
+  }
+  return best ? NOTE_NAMES[best.root] + best.formula.suffix : null;
+}
+
+function pruneRootIfUnused() {
+  if (rootPitchClass === null) return;
+  const tuning = currentTuning();
+  const stillExists = [...marks.keys()].some(key => {
+    const [string, fret] = key.split("-").map(Number);
+    return (tuning[string] + fret) % 12 === rootPitchClass;
+  });
+  if (!stillExists) rootPitchClass = null;
+}
+
 function renderTuning() {
   tuningInputs.innerHTML = DEFAULT_TUNING.map((note, index) => `
     <label>${6 - index}弦<input data-string="${index}" value="${note}" maxlength="2" aria-label="第 ${6 - index} 弦調音" /></label>`).join("");
@@ -32,20 +101,27 @@ function renderTuning() {
 }
 
 function renderBoard() {
-  let startFret = Math.max(0, Number(startFretInput.value) || 0);
-  let endFret = Math.max(startFret, Number(endFretInput.value) || startFret);
+  let startFret = Math.min(23, Math.max(0, Number(startFretInput.value) || 0));
+  let endFret = Math.min(24, Math.max(startFret, Number(endFretInput.value) || startFret));
   startFretInput.value = startFret;
   endFretInput.value = endFret;
   const firstGridFret = Math.max(1, startFret);
   const frets = Math.max(1, endFret - firstGridFret + 1);
   const tuning = currentTuning();
-  title.textContent = chordInput.value.trim() || "未命名和弦";
+  const detectedChord = detectChordName([...marks.keys()].map(key => {
+    const [string, fret] = key.split("-").map(Number);
+    return (tuning[string] + fret) % 12;
+  }), rootPitchClass);
+  if (nameMode === "auto") nameInput.value = detectedChord || "";
+  title.textContent = nameInput.value.trim() || "未命名圖表";
+  chordHint.hidden = !detectedChord;
+  chordHint.textContent = detectedChord ? `偵測到和弦：${detectedChord}` : "";
   const stepX = 118, stepY = 66, width = frets * stepX, height = 5 * stepY;
   const textSize = frets > 8 ? 13 : 18;
   const escapeHtml = value => value.replace(/[&<>"']/g, char => ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#039;" })[char]);
-  let svg = `<svg class="chord-svg" viewBox="-72 -18 ${width + 90} ${height + 66}" role="img" aria-label="${title.textContent} 和弦圖">`;
+  let svg = `<svg class="fret-svg" viewBox="-72 -30 ${width + 90} ${height + 90}" role="img" aria-label="${title.textContent} 指板圖">`;
   for (let fret = 0; fret <= frets; fret++) svg += `<line class="fret-line ${fret === 0 ? "nut" : ""}" x1="${fret * stepX}" y1="0" x2="${fret * stepX}" y2="${height}"/>`;
-  for (let string = 0; string < 6; string++) svg += `<line class="string-line" x1="0" y1="${string * stepY}" x2="${width}" y2="${string * stepY}"/>`;
+  for (let string = 0; string < 6; string++) svg += `<line class="string-line" x1="0" y1="${(5 - string) * stepY}" x2="${width}" y2="${(5 - string) * stepY}"/>`;
   svg += `<rect class="hit-area" x="-70" y="0" width="${width + 70}" height="${height}"/>`;
   for (let index = 0; index < frets; index++) svg += `<text class="fret-number" x="${(index + .5) * stepX}" y="${height + 38}">${firstGridFret + index}</text>`;
   const visibleMarks = new Map(marks);
@@ -54,12 +130,14 @@ function renderBoard() {
     const [string, fret] = key.split("-").map(Number);
     if (fret < startFret || fret > endFret) continue;
     // 音符落在弦線上，x 軸則是該格的中央，而不是分隔線交點。
-    const x = fret === 0 ? -42 : (fret - firstGridFret + .5) * stepX, y = string * stepY;
+    const x = fret === 0 ? -42 : (fret - firstGridFret + .5) * stepX, y = (5 - string) * stepY;
+    const pitchClass = (tuning[string] + fret) % 12;
+    const isRootPitch = rootPitchClass !== null && pitchClass === rootPitchClass;
     if (key === editingKey) {
-      const value = savedValue || NOTE_NAMES[(tuning[string] + fret) % 12];
-      svg += `<foreignObject x="${x - 35}" y="${y - 18}" width="70" height="36"><div xmlns="http://www.w3.org/1999/xhtml"><input id="marker-editor" class="marker-editor" value="${escapeHtml(value)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" /></div></foreignObject>`;
+      const value = savedValue || NOTE_NAMES[pitchClass];
+      svg += `<foreignObject x="${x - 65}" y="${y - 20}" width="130" height="40" style="overflow:visible"><div xmlns="http://www.w3.org/1999/xhtml" class="marker-editor-row"><input id="marker-editor" class="marker-editor" value="${escapeHtml(value)}" maxlength="8" aria-label="第 ${6 - string} 弦第 ${fret} 格標記" /><button type="button" id="root-toggle" class="root-toggle ${isRootPitch ? "is-active" : ""}" aria-pressed="${isRootPitch}" aria-label="設為根音" title="設為根音">●</button></div></foreignObject>`;
     } else {
-      svg += `<circle class="marker-circle" cx="${x}" cy="${y}" r="23"/><text class="marker-text" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(savedValue)}</text>`;
+      svg += `<circle class="marker-circle ${isRootPitch ? "is-root" : ""}" cx="${x}" cy="${y}" r="23"/><text class="marker-text" x="${x}" y="${y}" font-size="${textSize}">${escapeHtml(savedValue)}</text>`;
     }
   }
   svg += `</svg>`;
@@ -68,16 +146,16 @@ function renderBoard() {
   const getPosition = event => {
     const rect = board.getBoundingClientRect();
     const x = (event.clientX - rect.left) * (width + 90) / rect.width - 72;
-    const y = (event.clientY - rect.top) * (height + 66) / rect.height - 18;
+    const y = (event.clientY - rect.top) * (height + 90) / rect.height - 30;
     return {
-      string: Math.max(0, Math.min(5, Math.round(y / stepY))),
+      string: Math.max(0, Math.min(5, 5 - Math.round(y / stepY))),
       fret: startFret === 0 && x < 0
         ? 0
         : Math.max(firstGridFret, Math.min(endFret, Math.floor(x / stepX) + firstGridFret))
     };
   };
   board.addEventListener("click", event => {
-    if (event.target.closest && event.target.closest("#marker-editor")) return;
+    if (event.target.closest && event.target.closest("#marker-editor, #root-toggle")) return;
     const { string, fret } = getPosition(event), key = `${string}-${fret}`;
     editingKey = key;
     renderBoard();
@@ -86,6 +164,7 @@ function renderBoard() {
     event.preventDefault();
     const { string, fret } = getPosition(event);
     marks.delete(`${string}-${fret}`);
+    pruneRootIfUnused();
     editingKey = null;
     renderBoard();
   });
@@ -99,6 +178,7 @@ function renderBoard() {
       const text = editor.value.trim();
       if (text) marks.set(key, text);
       else marks.delete(key);
+      pruneRootIfUnused();
       editingKey = null;
       renderBoard();
     };
@@ -109,10 +189,28 @@ function renderBoard() {
       if (event.key === "Escape") { finished = true; editingKey = null; renderBoard(); }
     });
     editor.addEventListener("blur", save, { once: true });
+    const rootToggle = document.querySelector("#root-toggle");
+    rootToggle.addEventListener("mousedown", event => event.preventDefault());
+    rootToggle.addEventListener("click", event => {
+      event.stopPropagation();
+      const key = editingKey;
+      const [string, fret] = key.split("-").map(Number);
+      const pitchClass = (tuning[string] + fret) % 12;
+      const text = editor.value.trim();
+      if (text) marks.set(key, text);
+      else marks.delete(key);
+      rootPitchClass = rootPitchClass === pitchClass ? null : pitchClass;
+      renderBoard();
+    });
   }
 }
 
-chordInput.addEventListener("input", renderBoard);
+nameInput.addEventListener("input", () => {
+  if (nameMode === "auto") setNameMode("custom");
+  renderBoard();
+});
+nameModeAutoBtn.addEventListener("click", () => { setNameMode("auto"); renderBoard(); });
+nameModeCustomBtn.addEventListener("click", () => { setNameMode("custom"); renderBoard(); });
 function updateFretRange() {
   const start = Math.max(0, Number(startFretInput.value) || 0);
   const end = Math.max(start, Number(endFretInput.value) || start);
@@ -120,12 +218,13 @@ function updateFretRange() {
     const fret = Number(key.split("-")[1]);
     return fret >= start && fret <= end;
   }));
+  pruneRootIfUnused();
   renderBoard();
 }
 
 startFretInput.addEventListener("change", updateFretRange);
 endFretInput.addEventListener("change", updateFretRange);
-document.querySelector("#clear-btn").addEventListener("click", () => { marks.clear(); editingKey = null; renderBoard(); });
+document.querySelector("#clear-btn").addEventListener("click", () => { marks.clear(); rootPitchClass = null; editingKey = null; renderBoard(); });
 
 function updateSavedCount() {
   const total = savedCards.querySelectorAll(".saved-card").length;
@@ -202,5 +301,60 @@ document.querySelector("#save-btn").addEventListener("click", () => {
   attachSavedCardControls(card, handle);
   updateSavedCount();
 });
+
+const PDF_ROWS_PER_PAGE = 4;
+
+function groupCardsIntoRows(cards) {
+  const rows = [];
+  let pendingHalf = null;
+  cards.forEach(card => {
+    if (card.classList.contains("full")) {
+      if (pendingHalf) { rows.push([pendingHalf]); pendingHalf = null; }
+      rows.push([card]);
+    } else if (pendingHalf) {
+      rows.push([pendingHalf, card]);
+      pendingHalf = null;
+    } else {
+      pendingHalf = card;
+    }
+  });
+  if (pendingHalf) rows.push([pendingHalf]);
+  return rows;
+}
+
+function chunkRows(rows, size) {
+  const pages = [];
+  for (let i = 0; i < rows.length; i += size) pages.push(rows.slice(i, i + size));
+  return pages;
+}
+
+const printView = document.querySelector("#print-view");
+
+exportPdfBtn.addEventListener("click", () => {
+  const cards = [...savedCards.querySelectorAll(".saved-card")];
+  if (!cards.length) return;
+
+  printView.innerHTML = "";
+  chunkRows(groupCardsIntoRows(cards), PDF_ROWS_PER_PAGE).forEach(rowsChunk => {
+    const page = document.createElement("div");
+    page.className = "pdf-page";
+    rowsChunk.forEach(row => {
+      const rowEl = document.createElement("div");
+      rowEl.className = "pdf-row";
+      row.forEach(card => {
+        const clone = card.cloneNode(true);
+        clone.classList.remove("is-moving", "is-resizing");
+        clone.removeAttribute("draggable");
+        clone.querySelectorAll(".resize-saved, .delete-saved").forEach(button => button.remove());
+        rowEl.append(clone);
+      });
+      page.append(rowEl);
+    });
+    printView.append(page);
+  });
+
+  window.print();
+});
+
 renderTuning();
 renderBoard();
